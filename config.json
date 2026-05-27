@@ -1,0 +1,8 @@
+{
+    "input_dir": "0-decrypted",
+    "output_dir": "1-repack",
+    "miss_dir": "99-miss_folder",
+    "target_language": "ru",
+    "scan_path": "revisions/0/assetbundle/text/en",
+    "need_credits": true 
+}

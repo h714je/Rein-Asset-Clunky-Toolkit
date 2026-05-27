@@ -1,77 +1,113 @@
-# 🛠 Инструментарий для локализации Unity-ассетов
+# Rein-Asset-Clunky-Toolkit
 
-Этот набор скриптов предназначен для автоматизированного извлечения текста из расшифрованных ассетов Unity, подготовки его к переводу и последующей обратной сборки.
+A straightforward and slightly rough-around-the-edges set of Python scripts for extracting and repacking text assets (TextAsset and MonoBehaviour) from Unity asset bundles. 
 
-## 📌 Структура проекта
-* `0-original/` — Папка для оригинальных зашифрованных ассетов (нужно создать).
-* `0-decrypted/` — Папка для расшифрованных файлов.
-* `0-repacked/` — Итоговая папка с готовым переводом.
-* `shared_utils.py` — Общие настройки путей и логика работы с UnityPy.
+## ⚠️ Important Limitation (Known Issues)
+This tool was built for a very specific task and has its quirks (hence the name). 
+Currently, the parsing logic and key structure only work reliably with the **English localization**. 
+The toolkit expects the base files to be located at the following path:
+`revisions/0/assetbundle/text/en`
+
+Attempting to extract Japanese (`ja`) or Korean (`ko`) assets will likely result in MonoBehaviour parsing errors or skipped strings due to structural differences. If you plan to translate the game into your native language, please use the English bundles as your base source.
 
 ---
 
-## 🚀 Порядок работы
+## 📂 Project Structure
 
-### 1. Подготовка и дешифровка
-1. Склонируйте репозиторий с необходимыми утилитами:
-   ```bash
-   git clone https://gitlab.com/walter-sparrow-group/lunar-scripts.git
+```text
+Rein-Asset-Clunky-Toolkit/
+├── config.json             # Paths and language settings (edit this!)
+├── main.py                 # Main entry point for the toolkit
+├── requirements.txt        # Python dependencies
+└── src/                    # Source code logic
+    ├── extractor.py        
+    ├── repacker.py         
+    ├── credits.py          
+    └── utils.py            
 
-  
-2. Положите рядом папку `0-original` — это и есть оригинальная папка `0` из ассетов игры. Просто переименуйте его. 
-3. Расшифруйте ассеты в папку `0-decrypted`:
-   ```bash
-   python .\lunar-scripts\assetbundles\decrypt_assetbundle.py --dir .\0-original\assetbundle\ -o .\0-decrypted\assetbundle\
-   ```
-  
+```
 
-### 2. Извлечение текста для перевода
-1. Извлеките текст из ассетов в общий JSON-файл:
-   ```bash
-   python 1-extract_to_json.py
-   ```
-   * Текст извлекается из пути, указанного в `shared_utils.py` (переменная `EXTRACT_IN_FOLDER`). 
-2. Разделите файл на ключи и значения для удобства перевода:
-   ```bash
-   python 2-compress_json.py
-   ```
-   * Это создаст файл **`zzz-values.json`**, который и нужно переводить.
-   * Файл **`zzz-keys.json`** содержит техническую информацию, его трогать не нужно.
+Data directories (create these or they will be generated automatically):
 
-### 3. Перевод
-Откройте файл **`zzz-values.json`** и переведите текстовые значения на нужный язык.
+* `0-decrypted/` — Place your original (decrypted) game bundles here.
+* `1-repack/` — The final repacked files with your injected translations will appear here.
+* `99-miss_folder/` — Files that did not contain any text to translate will be safely copied here.
 
-### 4. Обратная сборка (Repack)
-1. Объедините ваш перевод с техническими ключами:
-   ```bash
-   python 3-decompress_json.py
-   ```
-   * Скрипт создаст файл `zzz-restored.json`.
-2. Внедрите перевод обратно в расшифрованные файлы:
-   ```bash
-   python 4-repack.py
-   ```
-   ⚠️ ВАЖНО!!! Скрипт 4-repack.py сохраняет в папку 0-repacked ТОЛЬКО те файлы, в которых был текст. Ассетов без текста (картинки, скрипты, шейдеры) там не будет. Не заменяйте оригинальную папку игры целиком! Вам нужно будет именно слить (скопировать с заменой) новые файлы с оригинальными.
-   * Измененные ассеты будут сохранены в папку `0-repacked`.
-3. Зашифруйте ассеты для игры:
-   ```bash
-   python .\lunar-scripts\assetbundles\encrypt_assetbundle.py --dir .\0-decrypted\assetbundle\ -o .\0-repacked\assetbundle\
-   ```
-  
+## 🚀 Installation
 
-### 5. Финальный этап (Patch)
-Скопируйте оригинальный файл `list.bin` в папку `0-repacked` и пропатчите его:
+1. Ensure you have **Python** installed (version 3.11 or higher is recommended).
+2. Download or clone this repository.
+3. Open a terminal in the project folder and install the `UnityPy` dependency:
 ```bash
-python .\lunar-scripts\assetbundles\patch_listbin.py .\0-repacked\list.bin -v
-```
-
-
----
-
-## ⚙️ Настройка
-Если вам нужно изменить папку, из которой извлекается текст (например, для другого сезона или языка), отредактируйте переменную `EXTRACT_IN_FOLDER` в файле **`shared_utils.py`**.
-```python
-EXTRACT_IN_FOLDER = os.path.join("0-decrypted", "assetbundle", "text", "en", "main", "season01")
-```
+pip install -r requirements.txt
 
 ```
+
+
+
+## ⚙️ Configuration (`config.json`)
+
+Before starting, open `config.json` in any text editor.
+
+```json
+{
+    "input_dir": "0-decrypted",
+    "output_dir": "1-repack",
+    "miss_dir": "99-miss_folder",
+    "target_language": "ru",
+    "scan_path": "revisions/0/assetbundle/text/en",
+    "need_credits": true
+}
+
+```
+
+* **`target_language`**: The language code you are translating *into* (e.g., `ru`, `es`, `fr`). This determines the names of the generated JSON files.
+* **`scan_path`**: Do not change this unless you are absolutely sure of what you are doing.
+* **`need_credits`**: Set to `true` if you need to extract and translate the ending credits (`credit.assetbundle`), or `false` if you want to skip them.
+
+## 📝 How to Use
+
+### Step 1: Extraction (Extract)
+
+Place your original English bundles into the `0-decrypted` folder, preserving the original folder structure (e.g., `0-decrypted/revisions/0/assetbundle/text/en/...`).
+
+Run the following command:
+
+```bash
+python main.py --extract
+
+```
+
+**What happens:**
+The script will scan the bundles and create the following files:
+
+* `0-ru-values.json` (the actual text to be translated).
+* `0-ru-keys.json` (a technical mapping file—do not touch this).
+* `0-ru-credit.txt` (a simple text file with the credits, if enabled in the config).
+
+### Step 2: Translation
+
+* Open `0-ru-values.json` and translate the values. This format is perfect for uploading to collaborative translation platforms like **Crowdin**, **Weblate**, or **Tolgee**.
+* The `0-ru-credit.txt` file can be translated in any standard text editor like Notepad. Do not delete technical tags like `<h3>` or `<type1>`.
+
+### Step 3: Repacking (Repack)
+
+Ensure that your translated `0-ru-values.json` and `0-ru-credit.txt` files are located in the root folder, right next to `main.py`.
+
+Run the following command:
+
+```bash
+python main.py --repack
+
+```
+
+**What happens:**
+The script takes the original bundles, carefully replaces the English text with your translations, and saves the ready-to-use files into the `1-repack` folder. Unmodified files will be sent to `99-miss_folder`.
+
+Grab the files from `1-repack`, put them back into the game, and test!
+
+
+## ⚠️ Legal Disclaimer
+This project is an unofficial fan-made open-source tool created solely for educational purposes and the preservation of a discontinued game. 
+This project is **not affiliated with, sponsored, endorsed, or maintained by** Square Enix, Applibot, or the creators of the NieR franchise. All rights to the game, its internal resources (assets), and the "NieR" trademark belong to their respective legal owners. 
+The toolkit does not contain any original game files. Please do not use this tool for piracy or the illegal distribution of copyrighted content.

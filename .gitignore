@@ -1,0 +1,11 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+0-decrypted/
+1-repack/
+99-miss_folder/
+
+*.log
