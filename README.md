@@ -108,6 +108,9 @@ Grab the files from `1-repack`, put them back into the game, and test!
 
 
 ## ⚠️ Legal Disclaimer
-This project is an unofficial fan-made open-source tool created solely for educational purposes and the preservation of a discontinued game. 
-This project is **not affiliated with, sponsored, endorsed, or maintained by** Square Enix, Applibot, or the creators of the NieR franchise. All rights to the game, its internal resources (assets), and the "NieR" trademark belong to their respective legal owners. 
-The toolkit does not contain any original game files. Please do not use this tool for piracy or the illegal distribution of copyrighted content.
+This project is an unofficial, fan-made, open-source tool created for educational, research, archival, and personal localization workflow purposes.
+This project is not affiliated with, sponsored, endorsed, approved, or maintained by any game publisher, developer, platform holder, or rights owner.
+All trademarks, product names, copyrighted works, and proprietary assets belong to their respective owners.
+This repository does not contain, distribute, or provide access to any original game files, copyrighted assets, encryption keys, decrypted data, or proprietary resources.
+Users are responsible for ensuring that they have the legal right to process any files used with this toolkit.
+The authors do not condone piracy, copyright infringement, unauthorized redistribution, or any illegal use of copyrighted content.
