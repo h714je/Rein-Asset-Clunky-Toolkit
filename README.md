@@ -170,9 +170,9 @@ For example, with:
 the toolkit will generate:
 
 ```text
-0-ru-values.json
-0-ru-keys.json
-0-ru-credit.txt
+0-en-values.json
+0-en-keys.json
+0-en-credit.txt
 ```
 
 #### `scan_path`
@@ -244,7 +244,6 @@ For example, if `target_language` is set to `ru`, the generated files will be:
 
 ```text
 0-ru-values.json
-0-ru-keys.json
 ```
 
 If credits processing is enabled, this file will also be generated:
@@ -289,8 +288,8 @@ Example:
 
 ```json
 {
-    "menu/start_button": "Start",
-    "menu/options_button": "Options"
+    "1": "Start",
+    "2": "Options"
 }
 ```
 
@@ -300,15 +299,7 @@ Good:
 
 ```json
 {
-    "menu/start_button": "Начать"
-}
-```
-
-Bad:
-
-```json
-{
-    "меню/кнопка_старт": "Начать"
+    "1": "Начать"
 }
 ```
 
