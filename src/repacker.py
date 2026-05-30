@@ -1,144 +1,107 @@
-import json
-import shutil
 from pathlib import Path
-from typing import Any, Dict
-import UnityPy
 
-from .utils import extract_text, save_text
+from .translation_store import TranslationStore
+from .backends import BACKENDS
+from .backends.base import PackContext
 
-def _repack_text_asset(obj: Any, target_map: Dict[str, str]) -> bool:
-    raw, src_type, data, tree = extract_text(obj)
-    if not raw: 
-        return False
-        
-    lines = []
-    is_modified = False
-    for line in raw.splitlines():
-        if ":" in line and not line.strip().startswith("//"):
-            k, _ = line.split(":", 1)
-            t_key = k if k in target_map else k.strip()
-            if t_key in target_map:
-                line = f"{k}:{target_map[t_key]}"
-                is_modified = True
-        lines.append(line)
-        
-    if is_modified:
-        save_text(obj, "\n".join(lines), src_type, data, tree)
-        return True
-    return False
 
-def _repack_monobehaviour(obj: Any, target_map: Dict[str, str]) -> bool:
-    if not hasattr(obj, 'read_typetree'):
-        return False
+def _make_pack_context(config: dict, input_dir: Path, output_dir: Path, miss_dir: Path, scan_path: str) -> PackContext:
+    """Create PackContext with compatibility for older/newer base.py."""
+    kwargs = dict(
+        input_dir=input_dir,
+        output_dir=output_dir,
+        miss_dir=miss_dir,
+        scan_path=scan_path,
+        copy_unmodified_to_output=bool(config.get("copy_unmodified_to_output", False)),
+        force_save=bool(config.get("force_save", False)),
+    )
+
+    # New field used by Help backend. If user's base.py is older, fall back safely.
     try:
-        tree = obj.read_typetree()
-        array_key = "DarkMoviesSubtitleArray" if "DarkMoviesSubtitleArray" in tree else "DarkMovieSubtitleArray" if "DarkMovieSubtitleArray" in tree else None
-        
-        if array_key:
-            m_name = tree.get("m_Name", f"Mono_{obj.path_id}")
-            local_modified = False
-            
-            for i, item in enumerate(tree[array_key]):
-                key = f"{m_name}_Subtitle_{i}"
-                if key in target_map:
-                    new_text = target_map[key]
-                    
-                    if "data" in item and "Text" in item["data"]:
-                        item["data"]["Text"] = new_text
-                        local_modified = True
-                    elif "Text" in item:
-                        item["Text"] = new_text
-                        local_modified = True
-                        
-            if local_modified:
-                obj.save_typetree(tree)
-                return True
-    except Exception:
-        pass
-    return False
+        return PackContext(
+            **kwargs,
+            allow_raw_fallback_repack=bool(config.get("allow_raw_fallback_repack", False)),
+        )
+    except TypeError:
+        ctx = PackContext(**kwargs)
+        setattr(ctx, "allow_raw_fallback_repack", bool(config.get("allow_raw_fallback_repack", False)))
+        return ctx
+
 
 def step_repack(config: dict) -> None:
     input_dir = Path(config["input_dir"])
     output_dir = Path(config["output_dir"])
     miss_dir = Path(config["miss_dir"])
-    scan_dir = input_dir / config["scan_path"]
+    scan_path = config["scan_path"]
+    scan_dir = input_dir / scan_path
     lang = config["target_language"]
-    
-    tr_values_json = Path(f"0-{lang}-values.json")
-    keys_json = Path("0-en-keys.json")
 
-    if not tr_values_json.exists() or not keys_json.exists(): 
+    tr_values_json = Path(config.get("translation_values_file", f"0-{lang}-values.json"))
+    keys_json = Path(config.get("keys_file", "0-en-keys.json"))
+
+    if not tr_values_json.exists() or not keys_json.exists():
         print("  Repack canceled: Translation map files or Key configurations are missing.")
+        print(f"  keys: {keys_json}")
+        print(f"  values: {tr_values_json}")
         return
 
-    with open(tr_values_json, 'r', encoding='utf-8') as f: 
-        v_data = json.load(f)
-    with open(keys_json, 'r', encoding='utf-8') as f: 
-        id_to_keys = json.load(f)
+    backend_name = config.get("packer_backend", "original")
+    backend_cls = BACKENDS.get(backend_name)
 
-    id_to_value = {str(k): v for k, v in v_data.items() if str(k).isdigit()}
-    if not id_to_value:
-        id_to_value = {str(v): k for k, v in v_data.items() if str(v).isdigit()}
+    if backend_cls is None:
+        print(f"  [!] Unknown packer_backend: {backend_name}")
+        print(f"      Available: {', '.join(sorted(BACKENDS.keys()))}")
+        return
 
-    file_map: Dict[str, Dict[str, Dict[str, str]]] = {}
-    for sid, keys in id_to_keys.items():
-        if sid in id_to_value:
-            text = id_to_value[sid]
-            for skey in keys:
-                path, oid, k = skey.split("|||", 2)
-                file_map.setdefault(path, {}).setdefault(oid, {})[k] = text
+    backend = backend_cls()
+    backend.prepare()
 
-    count_mod = 0
-    count_copy = 0
+    normalize_mode = config.get("normalize_newlines")
+    if normalize_mode is None:
+        normalize_mode = "literal" if backend_name == "help_unitypy_lz4_66" else "preserve"
+
+    store = TranslationStore.from_legacy(
+        keys_json,
+        tr_values_json,
+        newline_mode=normalize_mode,
+    )
+
+    ctx = _make_pack_context(config, input_dir, output_dir, miss_dir, scan_path)
 
     if not scan_dir.exists():
         print(f"  Error: Target scan folder does not exist: {scan_dir}")
         return
 
+    stats = {}
+    replacements = 0
+
     for file_path in scan_dir.rglob("*"):
         if not file_path.is_file():
             continue
-            
-        # Пропускаем титры, так как ими занимается отдельный модуль
+
         if file_path.name == "credit.assetbundle":
             continue
 
-        dst = output_dir / file_path.relative_to(input_dir)
-        miss_dst = miss_dir / file_path.relative_to(input_dir)
         semantic_path = file_path.relative_to(scan_dir).as_posix()
 
-        if semantic_path in file_map:
-            objects_map = file_map[semantic_path]
-            try:
-                env = UnityPy.load(str(file_path))
-                file_modified = False
-                
-                for obj in env.objects:
-                    oid = str(obj.path_id)
-                    if oid in objects_map:
-                        if obj.type.name == "TextAsset":
-                            if _repack_text_asset(obj, objects_map[oid]):
-                                file_modified = True
-                        elif obj.type.name == "MonoBehaviour":
-                            if _repack_monobehaviour(obj, objects_map[oid]):
-                                file_modified = True
+        result = backend.pack_file(
+            src=file_path,
+            semantic_path=semantic_path,
+            store=store,
+            ctx=ctx,
+        )
 
-                if file_modified:
-                    dst.parent.mkdir(parents=True, exist_ok=True)
-                    with open(dst, "wb") as f:
-                        f.write(env.file.save(packer="original"))
-                    count_mod += 1
-                else:
-                    miss_dst.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(file_path, miss_dst)
-                    count_copy += 1
-                    
-            except Exception as e:
-                print(f"  [!] Repack engine failed processing for {semantic_path}: {e}")
-        else:
-            miss_dst.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(file_path, miss_dst)
-            count_copy += 1
+        stats[result.status] = stats.get(result.status, 0) + 1
+        replacements += result.replacements
 
-    print(f"  Repack Summary Complete -> Patched Assets: {count_mod} | Unchanged/Copied to Fallback: {count_copy}")
+        print(f"  [{result.status}] {semantic_path} repl={result.replacements}")
 
+        if result.error:
+            print(f"      {result.error}")
+
+    print("  Repack Summary Complete")
+    print(f"  Backend: {backend.name}")
+    print(f"  Replacements: {replacements}")
+
+    for status in sorted(stats):
+        print(f"  {status}: {stats[status]}")

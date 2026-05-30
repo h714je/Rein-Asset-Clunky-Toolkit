@@ -1,0 +1,26 @@
+{
+    "input_dir": "0-decrypted",
+    "output_dir": "3-repacked-toolkit-help",
+    "miss_dir": "99-miss_folder",
+    "target_language": "ru",
+    "scan_path": "assetbundle/ui/help/en",
+    "need_credits": false,
+    "packer_backend": "help_unitypy_lz4_66",
+    "normalize_newlines": "literal",
+    "force_save": true,
+    "copy_unmodified_to_output": true,
+    "keys_file": "help-en-keys.json",
+    "source_values_file": "help-en-values.json",
+    "translation_values_file": "help-ru-values.json",
+    "unitypy_runtime": "help",
+    "use_live_filter": false,
+    "extract_object_types": [
+        "TextAsset"
+    ],
+    "skip_image_keys": true,
+    "skip_file_name_parts": [
+        "image"
+    ],
+    "load_from_bytes": true,
+    "allow_raw_fallback_repack": false
+}

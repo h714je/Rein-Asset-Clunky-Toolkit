@@ -1,82 +1,106 @@
 # Rein-Asset-Clunky-Toolkit
 
-A straightforward and slightly rough-around-the-edges set of Python scripts for extracting and repacking text assets from Unity AssetBundles.
+A small Python toolkit for extracting and repacking editable text from Unity AssetBundles.
 
-The toolkit is designed for personal localization workflows, research, archival work, and experiments with user-provided Unity files. It focuses on making extracted text easier to edit by converting supported Unity objects into JSON and plain text files.
+It was built for a practical localization workflow where most text bundles can be handled by UnityPy, while some UI/help bundles need extra handling because their Unity metadata is a little cursed.
 
-> This tool does not provide, download, decrypt, or distribute any third-party assets.
+The toolkit does **not** provide, download, decrypt, or distribute any third-party assets. You must supply your own files.
 
 ---
 
-## ⚠️ Important Limitation
+## What this toolkit does
 
-This tool was built for a very specific localization workflow and has its quirks, hence the name.
+- Extracts supported Unity text objects into JSON files.
+- Reinjects translated JSON values back into the original AssetBundles.
+- Supports two repacking backends:
+  - `original` for normal text bundles.
+  - `help_unitypy_lz4_66` for the special Help/UI text bundles.
+- Supports `TextAsset` and selected `MonoBehaviour` subtitle structures.
+- Can extract credits text into a plain `.txt` file when enabled.
 
-Currently, the parsing logic and generated key structure only work reliably with the **English localization files**.
+---
 
-The toolkit expects the source bundles to be located at:
+## Important limitations
+
+This toolkit is intentionally narrow. It was built around a specific Unity AssetBundle layout and should be treated as a localization workbench, not a universal AssetBundle editor.
+
+### Source language
+
+The extraction/key-generation workflow is expected to use the **English source bundles** as the base source. Japanese (`ja`) and Korean (`ko`) bundles have structural differences that cause skipped strings, incomplete extraction, or `MonoBehaviour` parsing issues.
+
+Recommended workflow:
 
 ```text
-revisions/0/assetbundle/text/en
+extract from English source -> translate JSON values -> repack into modified bundles
 ```
 
-Attempting to extract Japanese (`ja`) or Korean (`ko`) assets may result in `MonoBehaviour` parsing errors, skipped strings, or incomplete extraction because of structural differences.
+### Help/UI bundles
 
-If you plan to translate into another language, use the English localization bundles as the base source.
+The Help/UI backend is pinned to:
+
+```text
+UnityPy==1.10.18
+```
+
+Do **not** upgrade UnityPy for the Help backend. UnityPy 1.25 can repack these bundles, but it corrupts the internal CAB/SerializedFile layout for this workflow.
+
+The Help backend does **not** require patching UnityPy files in `site-packages`. It saves bundles through:
+
+```python
+env.file.save(packer=(66, 2))
+```
+
+This produces the required UnityFS profile:
+
+```text
+header_flags = 0x42
+block flags  = 0x0002
+```
+
+### Known Help/UI read-only files
+
+Some Help/UI bundles raise `String not terminated` when UnityPy tries to parse their TypeTree metadata. The toolkit can use a raw fallback to extract text from those bundles, but raw repacking is disabled by default because it can crash the game/runtime.
+
+For shipping builds, keep:
+
+```json
+"allow_raw_fallback_repack": false
+```
+
+That means those problematic files are copied unchanged during repack. Their text may appear in extracted JSON, but changes will not be injected unless you explicitly enable raw fallback repacking, which is unsafe.
 
 ---
 
-## 📂 Project Structure
+## Project structure
 
 ```text
 Rein-Asset-Clunky-Toolkit/
-├── config.json             # Paths and language settings
-├── main.py                 # Main entry point
-├── requirements.txt        # Python dependencies
-└── src/                    # Source code logic
-    ├── extractor.py
-    ├── repacker.py
+├── main.py
+├── requirements.txt
+├── config-help.example.json
+├── config-text.example.json
+└── src/
+    ├── __init__.py
     ├── credits.py
-    └── utils.py
+    ├── extractor.py
+    ├── raw_help_textasset.py
+    ├── repacker.py
+    ├── translation_store.py
+    ├── unitypy_help_runtime.py
+    ├── unitypy_textasset_io.py
+    ├── utils.py
+    └── backends/
+        ├── __init__.py
+        ├── base.py
+        ├── help_unitypy_lz4_66.py
+        └── original_unitypy.py
 ```
 
 ---
 
-## 📁 Working Directories
+## Installation
 
-These directories can be created manually, or they will be generated automatically when needed.
-
-```text
-0-decrypted/
-```
-
-Place your own user-provided, already accessible Unity AssetBundle files here.
-
-```text
-1-repack/
-```
-
-Repacked files with injected translations will be written here.
-
-```text
-99-miss_folder/
-```
-
-Files that did not contain supported editable text will be copied here for review, so they are not silently ignored.
-
----
-
-## 🚀 Installation
-
-### Requirements
-
-- Python 3.11 or newer is recommended
-- pip
-- UnityPy
-
-### Setup
-
-Clone or download this repository, then open a terminal inside the project folder.
+Python 3.11+ is recommended.
 
 Install dependencies:
 
@@ -84,23 +108,47 @@ Install dependencies:
 pip install -r requirements.txt
 ```
 
-The dependency list is intentionally small. At the moment, the toolkit mainly relies on:
+`requirements.txt` should pin UnityPy:
 
 ```text
-UnityPy
+UnityPy==1.10.18
+lz4
+```
+
+The Help backend will refuse newer UnityPy versions because newer releases have been observed to produce invalid Help/UI bundle layouts for this workflow.
+
+---
+
+## Configuration files
+
+The repository includes example configs:
+
+```text
+config-text.example.json
+config-help.example.json
+```
+
+Copy one of them before use:
+
+```bash
+cp config-text.example.json config-text.json
+cp config-help.example.json config-help.json
+```
+
+On PowerShell:
+
+```powershell
+Copy-Item config-text.example.json config-text.json
+Copy-Item config-help.example.json config-help.json
 ```
 
 ---
 
-## ⚙️ Configuration
+## Normal text workflow
 
-Before using the toolkit, open:
+Use this for the regular text bundles.
 
-```text
-config.json
-```
-
-Example configuration:
+Example config:
 
 ```json
 {
@@ -108,181 +156,46 @@ Example configuration:
     "output_dir": "1-repack",
     "miss_dir": "99-miss_folder",
     "target_language": "ru",
-    "scan_path": "revisions/0/assetbundle/text/en",
-    "need_credits": true
+    "scan_path": "assetbundle/text/en",
+    "need_credits": true,
+
+    "packer_backend": "original",
+    "normalize_newlines": "preserve",
+
+    "keys_file": "0-en-keys.json",
+    "source_values_file": "0-en-values.json",
+    "translation_values_file": "0-ru-values.json",
+
+    "use_live_filter": true,
+    "extract_object_types": ["TextAsset", "MonoBehaviour"],
+    "skip_image_keys": false,
+    "load_from_bytes": false
 }
 ```
 
-### Options
-
-#### `input_dir`
-
-Directory containing the source Unity AssetBundle files.
-
-Default:
-
-```text
-0-decrypted
-```
-
-#### `output_dir`
-
-Directory where repacked files will be written.
-
-Default:
-
-```text
-1-repack
-```
-
-#### `miss_dir`
-
-Directory where files without supported editable text will be copied.
-
-Default:
-
-```text
-99-miss_folder
-```
-
-#### `target_language`
-
-The language code you are translating into.
-
-Examples:
-
-```text
-ru
-es
-fr
-de
-it
-```
-
-This value controls the names of the generated translation files.
-
-For example, with:
+If your extracted source tree includes `revisions/0`, use this instead:
 
 ```json
-"target_language": "ru"
+"scan_path": "revisions/0/assetbundle/text/en"
 ```
 
-the toolkit will generate:
+### Extract
+
+```bash
+python main.py --config config-text.json --extract
+```
+
+This generates files such as:
 
 ```text
-0-en-values.json
 0-en-keys.json
+0-en-values.json
 0-en-credit.txt
 ```
 
-#### `scan_path`
+### Translate
 
-Internal path to the source localization bundles.
-
-Default:
-
-```text
-revisions/0/assetbundle/text/en
-```
-
-Do not change this unless you know exactly how your source files are structured.
-
-#### `need_credits`
-
-Controls whether the toolkit should process the credits file.
-
-```json
-"need_credits": true
-```
-
-Set to `true` to extract and repack credits.
-
-```json
-"need_credits": false
-```
-
-Set to `false` to skip credits processing.
-
----
-
-## 📝 How to Use
-
----
-
-## Step 1: Prepare Source Files
-
-Place your source Unity AssetBundle files into:
-
-```text
-0-decrypted/
-```
-
-Preserve the original folder structure expected by the config.
-
-Example:
-
-```text
-0-decrypted/revisions/0/assetbundle/text/en/...
-```
-
-The toolkit does not download, decrypt, or provide these files.  
-You must supply your own files and make sure you have the right to use them.
-
----
-
-## Step 2: Extract Text
-
-Run:
-
-```bash
-python main.py --extract
-```
-
-The toolkit will scan the configured source path and generate translation files in the project root.
-
-For example, if `target_language` is set to `ru`, the generated files will be:
-
-```text
-0-ru-values.json
-```
-
-If credits processing is enabled, this file will also be generated:
-
-```text
-0-ru-credit.txt
-```
-
-### Generated Files
-
-#### `0-ru-values.json`
-
-This is the main translation file.
-
-Edit this file.
-
-#### `0-ru-keys.json`
-
-This is a technical mapping file used during repacking.
-
-Do not edit this file manually.
-
-#### `0-ru-credit.txt`
-
-This is a plain text credits file.
-
-Edit this file only if credits extraction is enabled.
-
----
-
-## Step 3: Translate
-
-Open:
-
-```text
-0-ru-values.json
-```
-
-Translate only the values.
+Copy or rename the source values file into the target values file expected by your config, then translate only the JSON values.
 
 Example:
 
@@ -293,144 +206,191 @@ Example:
 }
 ```
 
-The keys must stay unchanged.
-
-Good:
+becomes:
 
 ```json
 {
-    "1": "Начать"
+    "1": "Начать",
+    "2": "Настройки"
 }
 ```
 
-The JSON format works well with translation platforms such as:
+Do not edit the generated key mapping file unless you are debugging the toolkit itself.
 
-- Crowdin
-- Weblate
-- Tolgee
-- Lokalise
-- POEditor
+### Repack
+
+```bash
+python main.py --config config-text.json --repack
+```
+
+Modified files are written to the configured `output_dir`.
 
 ---
 
-## Step 4: Translate Credits
+## Help/UI workflow
 
-If credits processing is enabled, edit:
+Use this for Help/UI bundles that need the special backend.
+
+Example config:
+
+```json
+{
+    "input_dir": "0-decrypted",
+    "output_dir": "3-repacked-toolkit-help",
+    "miss_dir": "99-miss_folder",
+    "target_language": "ru",
+    "scan_path": "assetbundle/ui/help/en",
+    "need_credits": false,
+
+    "packer_backend": "help_unitypy_lz4_66",
+    "normalize_newlines": "literal",
+    "force_save": true,
+    "copy_unmodified_to_output": true,
+
+    "keys_file": "help-en-keys.json",
+    "source_values_file": "help-en-values.json",
+    "translation_values_file": "help-ru-values.json",
+
+    "unitypy_runtime": "help",
+    "use_live_filter": false,
+    "extract_object_types": ["TextAsset"],
+    "skip_image_keys": true,
+    "skip_file_name_parts": ["image"],
+    "load_from_bytes": true,
+    "allow_raw_fallback_repack": false
+}
+```
+
+If your extracted source tree includes `revisions/0`, use this instead:
+
+```json
+"scan_path": "revisions/0/assetbundle/ui/help/en"
+```
+
+### Extract Help text
+
+```bash
+python main.py --config config-help.json --extract
+```
+
+For Help/UI, `normalize_newlines` should stay `literal`. This converts real newline characters in translations into literal `\\n`, which preserves the line-based `key:value` format used by these TextAssets.
+
+### Repack Help text
+
+```bash
+python main.py --config config-help.json --repack
+```
+
+Expected stable behavior:
 
 ```text
+repacked: many normal Help bundles
+rewrapped_force: a small number of unchanged-but-rewrapped bundles
+copied_ignored: image/font/audio/etc. files copied unchanged
+copied_load_fail_kept_original: String-not-terminated bundles copied unchanged
+```
+
+The exact counts depend on your source tree.
+
+---
+
+## Generated files
+
+The toolkit uses two JSON files for translation mapping.
+
+### Keys file
+
+Example:
+
+```text
+0-en-keys.json
+help-en-keys.json
+```
+
+This is an internal mapping file. Do not translate it.
+
+A mapping key looks like:
+
+```text
+some/path/file.assetbundle|||12345|||text.01
+```
+
+The `|||` delimiter is intentional.
+
+### Values file
+
+Example:
+
+```text
+0-ru-values.json
+help-ru-values.json
+```
+
+This is the file you translate. Keep the numeric JSON keys unchanged and edit only the values.
+
+---
+
+## Credits handling
+
+For normal text mode, credits can be extracted and repacked when:
+
+```json
+"need_credits": true
+```
+
+The toolkit reads/writes:
+
+```text
+0-en-credit.txt
 0-ru-credit.txt
 ```
 
-You can use any standard text editor.
-
-Do not remove technical tags such as:
+Do not remove technical tags in credits text, such as:
 
 ```text
 <h3>
 <type1>
 ```
 
-These tags are required for rebuilding the credits structure.
+---
+
+## Backend notes
+
+### `original`
+
+Used for regular text bundles. It saves with:
+
+```python
+env.file.save(packer="original")
+```
+
+It supports `TextAsset` and selected `MonoBehaviour` subtitle arrays.
+
+### `help_unitypy_lz4_66`
+
+Used for Help/UI bundles. It:
+
+- requires `UnityPy==1.10.18`;
+- disables UnityPy native reader modules before import;
+- monkey-patches UnityPy `ContainerHelper` to ignore broken `NodeHelper` / `UnknownObject` container entries;
+- saves with `env.file.save(packer=(66, 2))`;
+- does not patch UnityPy files on disk;
+- uses raw fallback for extraction of some problematic bundles;
+- keeps raw fallback repacking disabled by default.
 
 ---
 
-## Step 5: Repack
+## Safety notes
 
-Make sure the translated files are located in the project root, next to:
-
-```text
-main.py
-```
-
-Then run:
-
-```bash
-python main.py --repack
-```
-
-The toolkit will:
-
-1. Read the original source bundles
-2. Load the translated JSON/text files
-3. Replace supported text entries
-4. Rebuild the modified bundles
-5. Write the processed files into the output directory
-
-Repacked files will be written to:
-
-```text
-1-repack/
-```
-
-Files without supported editable text will be copied to:
-
-```text
-99-miss_folder/
-```
+- Keep backups of your translation JSON files.
+- Test small batches first.
+- Do not upgrade UnityPy unless you are prepared to revalidate all outputs.
+- Do not patch files inside `site-packages/UnityPy` for this toolkit.
+- Keep `allow_raw_fallback_repack` disabled for shipping builds unless you are intentionally experimenting.
 
 ---
 
-## Step 6: Review Output
-
-Check the files generated in:
-
-```text
-1-repack/
-```
-
-Use them only in your own local project, research setup, archival workflow, or personal localization environment.
-
----
-
-## 🧠 Notes for Translators
-
-- Edit only values, not keys
-- Keep JSON syntax valid
-- Do not delete technical tags in credits files
-- Keep backup copies of your translated files
-- Test small batches first before translating everything
-
----
-
-## 🛠️ Developer Notes
-
-The toolkit supports a narrow Unity AssetBundle text extraction and repacking workflow.
-
-It currently focuses on:
-
-- `TextAsset`
-- selected `MonoBehaviour` text structures
-- JSON-based translation values
-- technical key mapping for safe reinjection
-- optional credits extraction and repacking
-
-The generated key mapping uses a delimiter-based structure to reduce accidental string collisions during repacking.
-
-Example:
-
-```text
-some/path/file.bundle|||12345|||Subtitle_0
-```
-
-The delimiter is intentional:
-
-```text
-|||
-```
-
-Do not modify generated key files unless you are debugging the toolkit itself.
-
-Credits handling is isolated in:
-
-```text
-src/credits.py
-```
-
-because credits data may use a different internal structure from regular text assets.
-
----
-
-## ⚠️ Legal Disclaimer
+## Legal disclaimer
 
 This project is an unofficial, fan-made, open-source tool created for educational, research, archival, and personal localization workflow purposes.
 

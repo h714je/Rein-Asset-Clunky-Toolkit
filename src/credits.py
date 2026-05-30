@@ -14,24 +14,24 @@ def extract_credits(config: dict):
     out_txt = Path(f"0-en-credit.txt")
     
     if not credit_file.exists():
-        print(f"  [!] Файл титров не найден: {credit_file}")
+        print(f"  [!] Credits file not found: {credit_file}")
         return
         
     try:
         env = UnityPy.load(str(credit_file))
         for obj in env.objects:
             if obj.type.name == "TextAsset":
-                # В бандле титров только один TextAsset, просто извлекаем его
+                # The credits bundle contains only one TextAsset, so just extract it
                 raw_text, _, _, _ = extract_text(obj)
                 
                 if raw_text:
                     with open(out_txt, "w", encoding="utf-8") as f:
                         f.write(raw_text)
-                    print(f"  [CREDITS] Титры успешно извлечены в: {out_txt}")
+                    print(f"  [CREDITS] Credits successfully extracted to: {out_txt}")
                 return
                 
     except Exception as e:
-        print(f"  [!] Ошибка при извлечении титров: {e}")
+        print(f"  [!] Error while extracting credits: {e}")
 
 def repack_credits(config: dict):
     if not config.get("need_credits", False):
@@ -49,7 +49,7 @@ def repack_credits(config: dict):
         return
         
     if not in_txt.exists():
-        print(f"  [!] Измененный файл титров {in_txt} не найден. Пропуск запаковки титров.")
+        print(f"  [!] Modified credits file {in_txt} not found. Skipping credits repacking.")
         return
 
     try:
@@ -61,7 +61,7 @@ def repack_credits(config: dict):
         
         for obj in env.objects:
             if obj.type.name == "TextAsset":
-                # Напрямую перепаковываем единственный TextAsset
+                # Directly repack the only TextAsset
                 raw, src_type, d, tree = extract_text(obj)
                 save_text(obj, new_text, src_type, d, tree)
                 modified = True
@@ -72,7 +72,7 @@ def repack_credits(config: dict):
             dst.parent.mkdir(parents=True, exist_ok=True)
             with open(dst, "wb") as f:
                 f.write(env.file.save(packer="original"))
-            print(f"  [CREDITS] Титры успешно запакованы!")
+            print(f"  [CREDITS] Credits successfully repacked!")
             
     except Exception as e:
-        print(f"  [!] Ошибка при запаковке титров: {e}")
+        print(f"  [!] Error while repacking credits: {e}")

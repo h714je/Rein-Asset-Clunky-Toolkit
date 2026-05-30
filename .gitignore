@@ -1,11 +1,30 @@
-# Python
+# Game/source assets
+0-decrypted/
+0-somehow_repacked/
+*.assetbundle
+
+# Build outputs
+1-repack/
+3-repacked*/
+4-repacked*/
+99-miss_folder/
+miss_folder/
+
+# Generated translation files
+*-keys.json
+*-values.json
+0-*-credit.txt
+
+# Debug / experiments
+debug_*.txt
+help_text_diff.txt
+old_experiments/
+_patch_tmp/
+_string_fix*/
+_repair*/
 __pycache__/
 *.pyc
+
+# Virtual envs
 .venv/
-venv/
-
-0-decrypted/
-1-repack/
-99-miss_folder/
-
-*.log
+.venv-*/

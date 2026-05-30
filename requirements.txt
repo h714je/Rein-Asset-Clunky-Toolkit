@@ -1,1 +1,2 @@
-UnityPy
+UnityPy==1.10.18
+lz4

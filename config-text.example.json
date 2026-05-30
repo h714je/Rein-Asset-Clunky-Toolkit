@@ -1,0 +1,20 @@
+{
+    "input_dir": "0-decrypted",
+    "output_dir": "1-repack",
+    "miss_dir": "99-miss_folder",
+    "target_language": "ru",
+    "scan_path": "assetbundle/text/en",
+    "need_credits": true,
+
+    "packer_backend": "original",
+    "normalize_newlines": "preserve",
+
+    "keys_file": "0-en-keys.json",
+    "source_values_file": "0-en-values.json",
+    "translation_values_file": "0-ru-values.json",
+
+    "use_live_filter": true,
+    "extract_object_types": ["TextAsset", "MonoBehaviour"],
+    "skip_image_keys": false,
+    "load_from_bytes": false
+}
